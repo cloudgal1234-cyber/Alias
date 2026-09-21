@@ -331,7 +331,7 @@ footer.credit{text-align:center;color:rgba(255,255,255,.5);font-size:12px;margin
           <span class="opt-label">ℹ️ מידע</span>
           <p style="color:var(--muted);font-size:14px;line-height:1.6;margin:0;">
             כל קבוצה מתארת מילים לחברי הקבוצה שלה בזמן שהטיימר רץ.
-            כל מילה שנוחשה נכון = צעד אחד קדימה בלוח. שימו לב למשבצות המיוחדות!
+            מילה שנוחשה נכון = צעד קדימה בלוח, ודילוג על מילה = מינוס נקודה וצעד אחורה. שימו לב למשבצות המיוחדות!
           </p>
         </div>
       </div>
@@ -444,7 +444,7 @@ footer.credit{text-align:center;color:rgba(255,255,255,.5);font-size:12px;margin
       <li>כל תור, קבוצה אחת לוחצת על "התחל סיבוב" ורואה על המסך מילים בזה אחר זה.</li>
       <li>חברי הקבוצה מתארים בעל פה את המילה (בלי להגיד אותה) לשאר חברי הקבוצה.</li>
       <li>ניחוש נכון - לוחצים ✔️ נכון, מקבלים נקודה ועוברים למילה הבאה.</li>
-      <li>לא מצליחים לנחש - לוחצים ✖️ דלג ועוברים למילה הבאה בלי לאבד נקודה.</li>
+      <li>לא מצליחים לנחש - לוחצים ✖️ דלג, מאבדים נקודה אחת ועוברים למילה הבאה. כל דילוג נוסף מוריד נקודה נוספת.</li>
       <li>בסיום הזמן, כלי המשחק של הקבוצה מתקדם בלוח מספר משבצות כמספר הנקודות שנצברו.</li>
     </ul>
     <h3>משבצות מיוחדות</h3>
@@ -507,6 +507,7 @@ let state = {
   currentWord: null,
   roundScore: 0,
   correctWords: [],
+  skippedWords: [],
   timerInterval: null,
   timeLeft: 0,
   cells: [],
@@ -815,6 +816,7 @@ $("start-round-btn").addEventListener("click", startRound);
 function startRound(){
   state.roundScore = 0;
   state.correctWords = [];
+  state.skippedWords = [];
   state.timeLeft = state.timerSeconds;
 
   const team = state.teams[state.currentTeamIndex];
@@ -822,7 +824,7 @@ function startRound(){
   badge.textContent = team.name;
   badge.style.background = team.color;
 
-  $("round-score-live").textContent = "0";
+  updateLiveScore();
   state.currentWord = nextWord();
   $("word-card").textContent = state.currentWord;
 
@@ -849,15 +851,24 @@ function tickTimer(){
   }
 }
 
+function updateLiveScore(){
+  const el = $("round-score-live");
+  el.textContent = state.roundScore;
+  el.style.color = state.roundScore < 0 ? "#fca5a5" : (state.roundScore > 0 ? "#bbf7d0" : "#fff");
+}
+
 $("correct-btn").addEventListener("click", () => {
   state.roundScore++;
   state.correctWords.push(state.currentWord);
-  $("round-score-live").textContent = state.roundScore;
+  updateLiveScore();
   state.currentWord = nextWord();
   $("word-card").textContent = state.currentWord;
 });
 
 $("skip-btn").addEventListener("click", () => {
+  state.roundScore--;
+  state.skippedWords.push(state.currentWord);
+  updateLiveScore();
   state.currentWord = nextWord();
   $("word-card").textContent = state.currentWord;
 });
@@ -868,15 +879,25 @@ function endRound(){
   badge.textContent = team.name;
   badge.style.background = team.color;
 
-  $("summary-score").textContent = state.roundScore;
+  const scoreEl = $("summary-score");
+  scoreEl.textContent = state.roundScore;
+  scoreEl.style.color = state.roundScore < 0 ? "#dc2626" : (state.roundScore > 0 ? "#16a34a" : "#6b7280");
+
   const wordsWrap = $("summary-words");
   wordsWrap.innerHTML = "";
   state.correctWords.forEach(w => {
     const span = document.createElement("span");
-    span.textContent = w;
+    span.textContent = "✔️ " + w;
     wordsWrap.appendChild(span);
   });
-  if(state.correctWords.length === 0){
+  state.skippedWords.forEach(w => {
+    const span = document.createElement("span");
+    span.textContent = "✖️ " + w;
+    span.style.background = "#fee2e2";
+    span.style.color = "#991b1b";
+    wordsWrap.appendChild(span);
+  });
+  if(state.correctWords.length === 0 && state.skippedWords.length === 0){
     const span = document.createElement("span");
     span.textContent = "לא נוחשו מילים בסיבוב זה";
     span.style.background = "#fee2e2";
@@ -913,7 +934,7 @@ $("continue-btn").addEventListener("click", async () => {
   renderScoreboard();
 
   await animateMove(team, from, to);
-  team.score += state.roundScore;
+  team.score = Math.max(0, team.score + state.roundScore);
   renderScoreboard();
 
   await resolveCellEffects(team);
